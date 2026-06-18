@@ -1,0 +1,32 @@
+# Web框架
+fastapi
+uvicorn[standard]
+websockets
+
+# 数据库连接
+pymysql
+redis
+
+# 向量检索
+rank_bm25
+numpy
+jieba
+pandas
+transformers
+torch
+langchain
+langchain_community
+sentence_transformers
+pymilvus
+
+# AI模型
+openai
+
+# 配置和工具
+configparser
+locust
+websocket-client
+
+# 其他依赖
+pydantic
+starlette
