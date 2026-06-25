@@ -27,6 +27,10 @@ env/
 *.swo
 *~
 
+# 模型文件（太大，不适合git管理）
+rag_qa/model/
+bert_results/
+
 # 系统文件
 .DS_Store
 Thumbs.db
