@@ -145,6 +145,10 @@ export function useChat() {
     }
   }
 
+  function reconnectWs() {
+    ws.reconnect()
+  }
+
   return {
     messages,
     isStreaming,
@@ -156,5 +160,6 @@ export function useChat() {
     clearMessages,
     setFeedback,
     copyContent,
+    reconnectWs,
   }
 }

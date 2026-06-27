@@ -147,6 +147,12 @@ function formatTime(ts) {
           <div class="session-title" v-else>{{ session.title }}</div>
           <div class="session-meta">{{ formatTime(session.createdAt) }} · {{ session.messageCount || 0 }} 条消息</div>
         </div>
+        <button class="session-delete-btn" @click.stop="$emit('delete-session', session.id)" title="删除会话">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2.5 4h9l-.7 8.4a1.2 1.2 0 01-1.2 1.1H4.4a1.2 1.2 0 01-1.2-1.1L2.5 4z" stroke="currentColor" stroke-width="1.1" />
+            <path d="M5.5 4V2a1 1 0 011-1h1a1 1 0 011 1v2" stroke="currentColor" stroke-width="1.1" />
+          </svg>
+        </button>
       </div>
 
       <div v-if="sessions.length === 0" class="empty-sessions">
@@ -294,6 +300,26 @@ function formatTime(ts) {
   font-size: 11px;
   color: var(--text-sidebar-dim);
   margin-top: 2px;
+}
+
+.session-delete-btn {
+  flex-shrink: 0;
+  opacity: 0;
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.session-item:hover .session-delete-btn {
+  opacity: 1;
+}
+
+.session-delete-btn:hover {
+  background: rgba(248, 113, 113, 0.2);
 }
 
 .rename-input {

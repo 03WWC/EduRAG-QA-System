@@ -136,19 +136,21 @@ function formatSize(bytes) {
       <table class="doc-table" v-if="documents.length > 0">
         <thead>
           <tr>
+            <th>文件名</th>
             <th>学科</th>
-            <th>文件数</th>
-            <th>分块总数</th>
-            <th>最近上传</th>
+            <th>大小</th>
+            <th>分块数</th>
+            <th>上传时间</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="doc in documents" :key="doc.source">
+          <tr v-for="doc in documents" :key="doc.id">
+            <td class="file-name">{{ doc.file_name }}</td>
             <td><span class="source-tag">{{ doc.source }}</span></td>
-            <td>{{ doc.file_count }}</td>
-            <td>{{ doc.total_chunks }}</td>
-            <td class="time-col">{{ doc.latest_upload ? doc.latest_upload.slice(0, 16) : '-' }}</td>
+            <td>{{ formatSize(doc.file_size) }}</td>
+            <td>{{ doc.chunks_count }}</td>
+            <td class="time-col">{{ doc.uploaded_at ? doc.uploaded_at.slice(0, 16) : '-' }}</td>
             <td>
               <button class="btn-delete" @click="handleDelete(doc.source)">删除</button>
             </td>
@@ -272,6 +274,14 @@ function formatSize(bytes) {
   font-weight: 600;
   color: var(--text-secondary, #64748b);
   font-size: 11px;
+}
+
+.file-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .source-tag {

@@ -143,6 +143,24 @@ async def current_user_info(user: dict = Depends(get_current_user)):
     return {"username": user["username"], "role": user["role"], "user_id": user["user_id"]}
 
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+async def change_password(request: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    """修改当前用户密码"""
+    if len(request.new_password) < 3:
+        raise HTTPException(status_code=400, detail="新密码至少3位")
+    success = user_service.change_password(
+        user["username"], request.old_password, request.new_password
+    )
+    if not success:
+        raise HTTPException(status_code=400, detail="原密码错误")
+    return {"status": "success", "message": "密码已修改"}
+
+
 # ==================== 管理员路由 ====================
 
 @app.post("/api/admin/upload")
@@ -203,7 +221,7 @@ async def create_session(user: dict = Depends(get_current_user)):
 @app.get("/api/history/{session_id}")
 async def get_history(session_id: str, user: dict = Depends(get_current_user)):
     try:
-        history = qa_system.get_session_history(session_id)
+        history = qa_system.get_session_history(session_id, username=user.get("username"))
         return {"session_id": session_id, "history": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取历史记录失败: {str(e)}")
@@ -211,7 +229,7 @@ async def get_history(session_id: str, user: dict = Depends(get_current_user)):
 
 @app.delete("/api/history/{session_id}")
 async def clear_history(session_id: str, user: dict = Depends(get_current_user)):
-    success = qa_system.clear_session_history(session_id)
+    success = qa_system.clear_session_history(session_id, username=user.get("username"))
     if success:
         return {"status": "success", "message": "历史记录已清除"}
     else:
@@ -244,7 +262,7 @@ async def query(request: QueryRequest, user: dict = Depends(get_current_user)):
     if need_rag:
         collected_answer = ""
         for token, is_complete in qa_system.query(
-            query=request.query, source_filter=request.source_filter, session_id=session_id
+            query=request.query, source_filter=request.source_filter, session_id=session_id, username=user.get("username")
         ):
             if token:
                 collected_answer += token
@@ -306,7 +324,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             collected_answer = ""
-            for token, is_complete in qa_system.query(query, source_filter=source_filter, session_id=session_id):
+            for token, is_complete in qa_system.query(query, source_filter=source_filter, session_id=session_id, username=user.get("username")):
                 collected_answer += token
                 if is_complete and not collected_answer:
                     if websocket.client_state == websocket.client_state.CONNECTED:
