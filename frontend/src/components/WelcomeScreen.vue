@@ -24,10 +24,10 @@ const suggestions = [
         </defs>
       </svg>
     </div>
-    <h1 class="welcome-title">你好，我是黑马程序员</h1>
+    <h1 class="welcome-title">你好，我是智能学习助手</h1>
     <p class="welcome-desc">
-      你的智能学习助手，基于 RAG + 知识库检索，<br />
-      为你解答 IT 教育相关问题
+      基于 RAG + 知识库检索，支持多轮对话，<br />
+      为你解答各类学习和知识相关问题
     </p>
     <div class="suggestions">
       <button
