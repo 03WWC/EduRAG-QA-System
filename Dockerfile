@@ -10,9 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 libglib2.0-0t64 libsm6 libxext6 libxrender-dev libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-# pip 换清华源 + 装 PyTorch CPU
+# pip 全部走清华源（清华同步了 PyTorch 的包）
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip install --no-cache-dir torch==2.5.1 --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch==2.5.1
 
 COPY requirements-server.txt .
 RUN pip install --no-cache-dir -r requirements-server.txt
