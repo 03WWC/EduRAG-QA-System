@@ -3,6 +3,21 @@ import { ref, computed } from 'vue'
 const STORAGE_KEY = 'eduraag_sessions'
 
 /**
+ * Helper: make an authenticated API call.
+ */
+function authFetch(path, options = {}) {
+  const base = localStorage.getItem('api_base') || ''
+  const token = localStorage.getItem('eduraag_token') || ''
+  return fetch(`${base}${path}`, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  })
+}
+
+/**
  * Session management: CRUD + localStorage persistence.
  */
 export function useSession() {
@@ -27,8 +42,7 @@ export function useSession() {
    * Create a new session via API, store and switch to it.
    */
   async function createSession() {
-    const apiBase = localStorage.getItem('api_base') || ''
-    const resp = await fetch(`${apiBase}/api/create_session`, { method: 'POST' })
+    const resp = await authFetch('/api/create_session', { method: 'POST' })
     if (!resp.ok) throw new Error('创建会话失败')
     const data = await resp.json()
 
@@ -46,7 +60,6 @@ export function useSession() {
 
   /**
    * Switch to an existing session.
-   * @param {string} sessionId
    */
   async function switchSession(sessionId) {
     currentSessionId.value = sessionId
@@ -54,8 +67,6 @@ export function useSession() {
 
   /**
    * Rename a session.
-   * @param {string} sessionId
-   * @param {string} newTitle
    */
   function renameSession(sessionId, newTitle) {
     const s = sessions.value.find((s) => s.id === sessionId)
@@ -67,7 +78,6 @@ export function useSession() {
 
   /**
    * Delete a session.
-   * @param {string} sessionId
    */
   function deleteSession(sessionId) {
     sessions.value = sessions.value.filter((s) => s.id !== sessionId)
@@ -77,21 +87,17 @@ export function useSession() {
     saveSessions()
     // Also clear from server
     try {
-      const apiBase = localStorage.getItem('api_base') || ''
-      fetch(`${apiBase}/api/history/${sessionId}`, { method: 'DELETE' })
+      authFetch(`/api/history/${sessionId}`, { method: 'DELETE' })
     } catch {
       // Silently ignore server clear failures
     }
   }
 
   /**
-   * Fetch conversation history from API.
-   * @param {string} sessionId
-   * @returns {Promise<Array>}
+   * Fetch conversation history from API (authenticated).
    */
   async function fetchHistory(sessionId) {
-    const apiBase = localStorage.getItem('api_base') || ''
-    const resp = await fetch(`${apiBase}/api/history/${sessionId}`)
+    const resp = await authFetch(`/api/history/${sessionId}`)
     if (!resp.ok) return []
     const data = await resp.json()
     return data.history || []
@@ -99,11 +105,9 @@ export function useSession() {
 
   /**
    * Clear history for current session on the server.
-   * @param {string} sessionId
    */
   async function clearHistory(sessionId) {
-    const apiBase = localStorage.getItem('api_base') || ''
-    const resp = await fetch(`${apiBase}/api/history/${sessionId}`, { method: 'DELETE' })
+    const resp = await authFetch(`/api/history/${sessionId}`, { method: 'DELETE' })
     return resp.ok
   }
 
@@ -112,8 +116,7 @@ export function useSession() {
    */
   async function fetchSources() {
     try {
-      const apiBase = localStorage.getItem('api_base') || ''
-      const resp = await fetch(`${apiBase}/api/sources`)
+      const resp = await authFetch('/api/sources')
       if (!resp.ok) return
       const data = await resp.json()
       sources.value = data.sources || []

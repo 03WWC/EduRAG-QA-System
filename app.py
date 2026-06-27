@@ -98,9 +98,22 @@ async def login(request: LoginRequest):
     return {"token": token, "username": user["username"], "role": user["role"]}
 
 
+@app.post("/api/auth/signup")
+async def signup(request: LoginRequest):
+    """公开注册（仅普通用户角色）"""
+    if not request.username or not request.password:
+        raise HTTPException(status_code=400, detail="用户名和密码不能为空")
+    if len(request.password) < 3:
+        raise HTTPException(status_code=400, detail="密码至少3位")
+    success = user_service.create_user(request.username, request.password, role="user")
+    if not success:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    return {"status": "success", "username": request.username, "role": "user"}
+
+
 @app.post("/api/auth/register")
 async def register(request: UserCreate, admin: dict = Depends(get_admin_user)):
-    """管理员创建用户"""
+    """管理员创建用户（可指定角色）"""
     success = user_service.create_user(request.username, request.password, request.role)
     if not success:
         raise HTTPException(status_code=400, detail="用户名已存在")

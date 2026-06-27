@@ -3,10 +3,20 @@ import { ref } from 'vue'
 
 const emit = defineEmits(['login-success'])
 
+const mode = ref('login') // 'login' | 'signup'
 const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const success = ref('')
+
+function switchMode(m) {
+  mode.value = m
+  error.value = ''
+  success.value = ''
+  username.value = ''
+  password.value = ''
+}
 
 async function handleLogin() {
   if (!username.value.trim() || !password.value.trim()) {
@@ -44,6 +54,45 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+async function handleSignup() {
+  if (!username.value.trim() || !password.value.trim()) {
+    error.value = '请输入用户名和密码'
+    return
+  }
+  if (password.value.length < 3) {
+    error.value = '密码至少3位'
+    return
+  }
+
+  loading.value = true
+  error.value = ''
+  success.value = ''
+
+  try {
+    const apiBase = localStorage.getItem('api_base') || ''
+    const resp = await fetch(`${apiBase}/api/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.value.trim(),
+        password: password.value,
+      }),
+    })
+
+    if (!resp.ok) {
+      const data = await resp.json()
+      throw new Error(data.detail || '注册失败')
+    }
+
+    success.value = '注册成功！请登录'
+    switchMode('login')
+  } catch (e) {
+    error.value = e.message || '注册失败，请检查网络连接'
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <template>
@@ -67,33 +116,43 @@ async function handleLogin() {
         <p>智能问答系统</p>
       </div>
 
-      <form class="login-form" @submit.prevent="handleLogin">
+      <!-- Mode tabs -->
+      <div class="mode-tabs">
+        <button :class="{ active: mode === 'login' }" @click="switchMode('login')">登录</button>
+        <button :class="{ active: mode === 'signup' }" @click="switchMode('signup')">注册</button>
+      </div>
+
+      <!-- Login form -->
+      <form v-if="mode === 'login'" class="login-form" @submit.prevent="handleLogin">
         <div class="field">
           <label>用户名</label>
-          <input
-            v-model="username"
-            type="text"
-            placeholder="请输入用户名"
-            :disabled="loading"
-            autocomplete="username"
-          />
+          <input v-model="username" type="text" placeholder="请输入用户名" :disabled="loading" autocomplete="username" />
         </div>
-
         <div class="field">
           <label>密码</label>
-          <input
-            v-model="password"
-            type="password"
-            placeholder="请输入密码"
-            :disabled="loading"
-            autocomplete="current-password"
-          />
+          <input v-model="password" type="password" placeholder="请输入密码" :disabled="loading" autocomplete="current-password" />
         </div>
-
+        <p v-if="success" class="success-msg">{{ success }}</p>
         <p v-if="error" class="error-msg">{{ error }}</p>
-
         <button type="submit" class="btn-login" :disabled="loading">
           {{ loading ? '登录中...' : '登 录' }}
+        </button>
+      </form>
+
+      <!-- Signup form -->
+      <form v-else class="login-form" @submit.prevent="handleSignup">
+        <div class="field">
+          <label>用户名</label>
+          <input v-model="username" type="text" placeholder="设置用户名" :disabled="loading" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input v-model="password" type="password" placeholder="设置密码（至少3位）" :disabled="loading" autocomplete="new-password" />
+        </div>
+        <p v-if="error" class="error-msg">{{ error }}</p>
+        <p v-if="success" class="success-msg">{{ success }}</p>
+        <button type="submit" class="btn-login" :disabled="loading">
+          {{ loading ? '注册中...' : '注 册' }}
         </button>
       </form>
     </div>
@@ -120,12 +179,10 @@ async function handleLogin() {
 
 .login-header {
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
-.login-icon {
-  margin-bottom: 12px;
-}
+.login-icon { margin-bottom: 12px; }
 
 .login-header h1 {
   font-size: 22px;
@@ -137,6 +194,32 @@ async function handleLogin() {
 .login-header p {
   font-size: 13px;
   color: var(--text-secondary, #64748b);
+}
+
+/* Mode tabs */
+.mode-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--border, #e2e8f0);
+}
+
+.mode-tabs button {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.mode-tabs button.active {
+  color: #6366f1;
+  border-bottom-color: #6366f1;
+  font-weight: 600;
 }
 
 .login-form {
@@ -180,6 +263,13 @@ async function handleLogin() {
   margin: 0;
 }
 
+.success-msg {
+  font-size: 13px;
+  color: #22c55e;
+  text-align: center;
+  margin: 0;
+}
+
 .btn-login {
   padding: 12px;
   border: none;
@@ -192,12 +282,6 @@ async function handleLogin() {
   transition: opacity 0.2s;
 }
 
-.btn-login:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.btn-login:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.btn-login:hover:not(:disabled) { opacity: 0.9; }
+.btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
