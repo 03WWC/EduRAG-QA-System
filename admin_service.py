@@ -1,18 +1,15 @@
 import os
 import sys
-import uuid
 import pymysql
-from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from base import logger, Config
 from rag_qa.core.vector_store import VectorStore
-from rag_qa.edu_text_spliter.edu_chinese_recursive_text_splitter import ChineseRecursiveTextSplitter
 
 conf = Config()
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rag_qa", "data")
 
 # 文件扩展名 → loader 映射（同 document_processor）
 LOADER_MAP = {
@@ -56,42 +53,44 @@ class AdminService:
 
     def process_upload(self, file_bytes: bytes, file_name: str, source: str, username: str) -> dict:
         """
-        处理上传文件：
-        1. 保存到 uploads/{source}/
-        2. 用对应 loader 加载文档
-        3. 用 ChineseRecursiveTextSplitter 分块
-        4. 存入 Milvus
-        5. 记录到 MySQL uploads 表
+        处理上传文件：保存 → 复用 process_documents 处理 → 存 Milvus → 记录
         """
         ext = os.path.splitext(file_name)[1].lower()
         if ext not in LOADER_MAP:
             raise ValueError(f"不支持的文件类型: {ext}，支持: {list(LOADER_MAP.keys())}")
 
-        # 保存文件
-        save_dir = os.path.join(UPLOAD_DIR, source)
+        # 1. 保存到 rag_qa/data/{source}_data/
+        save_dir = os.path.join(UPLOAD_DIR, f"{source}_data")
         os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f"{uuid.uuid4().hex[:8]}_{file_name}")
+        save_path = os.path.join(save_dir, file_name)
+        # 重名则加序号
+        if os.path.exists(save_path):
+            base, ext = os.path.splitext(file_name)
+            for i in range(1, 100):
+                save_path = os.path.join(save_dir, f"{base}({i}){ext}")
+                if not os.path.exists(save_path):
+                    break
         with open(save_path, "wb") as f:
             f.write(file_bytes)
         file_size = len(file_bytes)
         logger.info(f"文件已保存: {save_path} ({file_size} bytes)")
 
-        # 加载文档
-        documents = self._load_file(save_path, ext, source)
-        if not documents:
-            raise RuntimeError("文档解析失败，未能提取到内容")
-
-        logger.info(f"文档解析成功，获得 {len(documents)} 个文档块")
-
-        # 父-子分块
-        child_chunks = self._split_documents(documents)
+        # 2. 复用 document_processor 的 process_documents 处理整个目录
+        from rag_qa.core.document_processor import process_documents
+        conf = Config()
+        child_chunks = process_documents(
+            save_dir,
+            parent_chunk_size=conf.PARENT_CHUNK_SIZE,
+            child_chunk_size=conf.CHILD_CHUNK_SIZE,
+            chunk_overlap=conf.CHUNK_OVERLAP,
+        )
         logger.info(f"分块完成，共 {len(child_chunks)} 个子块")
 
-        # 存入 Milvus
+        # 3. 存入 Milvus
         self.vector_store.add_documents(child_chunks)
         logger.info(f"已存入 Milvus: {len(child_chunks)} 个子块")
 
-        # 记录到 MySQL
+        # 4. 记录到 MySQL
         try:
             self.mysql.cursor.execute(
                 "INSERT INTO uploads (file_name, source, file_size, chunks_count, uploaded_by) VALUES (%s, %s, %s, %s, %s)",
@@ -109,81 +108,23 @@ class AdminService:
             "status": "success",
         }
 
-    def _load_file(self, file_path: str, ext: str, source: str) -> list:
-        """加载单个文件"""
-        from rag_qa.edu_document_loaders.edu_pdfloader import OCRPDFLoader
-        from rag_qa.edu_document_loaders.edu_docloader import OCRDOCLoader
-        from rag_qa.edu_document_loaders.edu_pptloader import OCRPPTLoader
-        from rag_qa.edu_document_loaders.edu_imgloader import OCRIMGLoader
-        from langchain_community.document_loaders import TextLoader
-        from langchain_community.document_loaders.markdown import UnstructuredMarkdownLoader
-
-        loader_map = {
-            ".pdf": OCRPDFLoader,
-            ".docx": OCRDOCLoader,
-            ".ppt": OCRPPTLoader,
-            ".pptx": OCRPPTLoader,
-            ".jpg": OCRIMGLoader,
-            ".png": OCRIMGLoader,
-            ".txt": TextLoader,
-            ".md": UnstructuredMarkdownLoader,
-        }
-
-        loader_class = loader_map[ext]
-        if ext == ".txt":
-            loader = loader_class(file_path, encoding="utf-8")
-        else:
-            loader = loader_class(file_path)
-
-        docs = loader.load()
-        for doc in docs:
-            doc.metadata["source"] = source
-            doc.metadata["file_path"] = file_path
-            doc.metadata["timestamp"] = datetime.now().isoformat()
-        return docs
-
-    def _split_documents(self, documents: list) -> list:
-        """父-子文档分块"""
-        parent_splitter = ChineseRecursiveTextSplitter(
-            chunk_size=conf.PARENT_CHUNK_SIZE, chunk_overlap=conf.CHUNK_OVERLAP
-        )
-        child_splitter = ChineseRecursiveTextSplitter(
-            chunk_size=conf.CHILD_CHUNK_SIZE, chunk_overlap=conf.CHUNK_OVERLAP
-        )
-
-        child_chunks = []
-        for i, doc in enumerate(documents):
-            parent_docs = parent_splitter.split_documents([doc])
-            for j, parent_doc in enumerate(parent_docs):
-                parent_id = f"up_{os.path.basename(doc.metadata.get('file_path',''))}_{i}_parent_{j}"
-                parent_doc.metadata["parent_id"] = parent_id
-                parent_doc.metadata["parent_content"] = parent_doc.page_content
-
-                sub_chunks = child_splitter.split_documents([parent_doc])
-                for k, sub_chunk in enumerate(sub_chunks):
-                    sub_chunk.metadata["parent_id"] = parent_id
-                    sub_chunk.metadata["parent_content"] = parent_doc.page_content
-                    sub_chunk.metadata["id"] = f"{parent_id}_child_{k}"
-                    child_chunks.append(sub_chunk)
-
-        return child_chunks
-
     def list_documents(self) -> list:
-        """列出所有已上传文档（按 source 汇总）"""
+        """列出所有已上传文档详情"""
         try:
             self.mysql.cursor.execute("""
-                SELECT source, COUNT(*) as file_count, SUM(chunks_count) as total_chunks,
-                       MAX(uploaded_at) as latest_upload
+                SELECT id, file_name, source, file_size, chunks_count, uploaded_by, uploaded_at
                 FROM uploads
-                GROUP BY source
-                ORDER BY latest_upload DESC
+                ORDER BY uploaded_at DESC
             """)
             return [
                 {
-                    "source": row[0],
-                    "file_count": row[1],
-                    "total_chunks": row[2],
-                    "latest_upload": str(row[3]) if row[3] else "",
+                    "id": row[0],
+                    "file_name": row[1],
+                    "source": row[2],
+                    "file_size": row[3],
+                    "chunks_count": row[4],
+                    "uploaded_by": row[5],
+                    "uploaded_at": str(row[6]) if row[6] else "",
                 }
                 for row in self.mysql.cursor.fetchall()
             ]
@@ -239,7 +180,7 @@ class AdminService:
 
             # 删除磁盘文件
             import shutil
-            source_dir = os.path.join(UPLOAD_DIR, source)
+            source_dir = os.path.join(UPLOAD_DIR, f"{source}_data")
             if os.path.exists(source_dir):
                 shutil.rmtree(source_dir)
 

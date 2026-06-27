@@ -1,6 +1,9 @@
 import { ref, computed } from 'vue'
 
-const STORAGE_KEY = 'eduraag_sessions'
+function getStorageKey() {
+  const username = localStorage.getItem('eduraag_username') || 'default'
+  return `eduraag_sessions_${username}`
+}
 
 /**
  * Helper: make an authenticated API call.
@@ -27,15 +30,19 @@ export function useSession() {
 
   function loadSessions() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
+      const raw = localStorage.getItem(getStorageKey())
       return raw ? JSON.parse(raw) : []
     } catch {
       return []
     }
   }
 
+  function reloadSessions() {
+    sessions.value = loadSessions()
+  }
+
   function saveSessions() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.value))
+    localStorage.setItem(getStorageKey(), JSON.stringify(sessions.value))
   }
 
   /**
@@ -97,10 +104,15 @@ export function useSession() {
    * Fetch conversation history from API (authenticated).
    */
   async function fetchHistory(sessionId) {
-    const resp = await authFetch(`/api/history/${sessionId}`)
-    if (!resp.ok) return []
-    const data = await resp.json()
-    return data.history || []
+    try {
+      const resp = await authFetch(`/api/history/${sessionId}`)
+      if (!resp.ok) return []
+      const data = await resp.json()
+      return data.history || []
+    } catch (e) {
+      console.error('获取历史失败:', e)
+      return []
+    }
   }
 
   /**
@@ -134,10 +146,12 @@ export function useSession() {
     currentSession,
     sessions,
     sources,
+    reloadSessions,
     createSession,
     switchSession,
     renameSession,
     deleteSession,
+    saveSessions,
     fetchHistory,
     clearHistory,
     fetchSources,

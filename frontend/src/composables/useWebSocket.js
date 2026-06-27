@@ -140,6 +140,19 @@ export function useWebSocket(options = {}) {
     reconnecting.value = false
   }
 
+  function reconnect() {
+    if (retryTimer) clearTimeout(retryTimer)
+    if (heartbeatTimer) clearInterval(heartbeatTimer)
+    if (ws.value) {
+      ws.value.close(1000, 'Reconnect with token')
+      ws.value = null
+    }
+    connected.value = false
+    reconnecting.value = false
+    retryCount = 0
+    connect()
+  }
+
   // Auto-connect
   connect()
 
@@ -149,6 +162,6 @@ export function useWebSocket(options = {}) {
     instance = null
   })
 
-  instance = { send, disconnect, connected, reconnecting }
+  instance = { send, disconnect, reconnect, connected, reconnecting }
   return instance
 }

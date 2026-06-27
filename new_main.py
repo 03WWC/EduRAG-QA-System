@@ -44,17 +44,28 @@ class IntegratedQASystem:
     def init_conversation_table(self):
         """初始化MySQL中的conversations表，用于存储对话历史"""
         try:
-            # 创建 conversations 表，包含会话 ID、问题、答案和时间戳
+            # 创建 conversations 表，包含会话 ID、用户名、问题、答案和时间戳
             self.mysql_client.cursor.execute("""
                 CREATE TABLE IF NOT EXISTS conversations(
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     session_id VARCHAR(36) NOT NULL,
+                    username VARCHAR(50) NOT NULL DEFAULT '',
                     question TEXT NOT NULL,
                     answer TEXT NOT NULL,
                     timestamp DATETIME NOT NULL,
-                    INDEX idx_session_id (session_id)
+                    INDEX idx_session_id (session_id),
+                    INDEX idx_username (username)
                 )
             """)
+            # 兼容旧表：如果 username 列不存在则添加
+            try:
+                self.mysql_client.cursor.execute("""
+                    ALTER TABLE conversations ADD COLUMN username VARCHAR(50) NOT NULL DEFAULT ''
+                """)
+                self.mysql_client.connection.commit()
+                self.logger.info("已为旧表添加 username 列")
+            except pymysql.MySQLError:
+                pass  # 列已存在，忽略
             # 提交数据库事务
             self.mysql_client.connection.commit()
             # 记录表初始化成功的日志
@@ -92,107 +103,102 @@ class IntegratedQASystem:
             # 以生成器方式返回错误信息
             yield f"错误：LLM调用失败 - {e}"
 
-    def _fetch_recent_history(self, session_id):
-        """获取最近5轮对话历史"""
+    def _fetch_recent_history(self, session_id, username=None):
+        """获取最近5轮对话历史（按用户隔离）"""
         try:
-            # 执行 SQL 查询，获取最近 5 轮对话
-            self.mysql_client.cursor.execute("""
-                      SELECT question, answer
-                      FROM conversations
-                      WHERE session_id = %s
-                      ORDER BY timestamp DESC
-                      LIMIT %s
-                  """, (session_id, 5))
-            # print(f'self.mysql_client.cursor.fetchall()---》{self.mysql_client.cursor.fetchall()}')
-            # 将查询结果转换为字典列表
+            if username:
+                self.mysql_client.cursor.execute("""
+                          SELECT question, answer
+                          FROM conversations
+                          WHERE session_id = %s AND username = %s
+                          ORDER BY timestamp DESC
+                          LIMIT %s
+                      """, (session_id, username, 5))
+            else:
+                self.mysql_client.cursor.execute("""
+                          SELECT question, answer
+                          FROM conversations
+                          WHERE session_id = %s
+                          ORDER BY timestamp DESC
+                          LIMIT %s
+                      """, (session_id, 5))
             history = [{"question": row[0], "answer": row[1]} for row in self.mysql_client.cursor.fetchall()]
-            # 反转结果，按时间正序返回
             return history[::-1]
 
         except pymysql.MySQLError as e:
-            # 记录查询失败的错误日志
             self.logger.error(f"获取对话历史失败: {e}")
-            # 返回空列表
             return []
 
-    def get_session_history(self, session_id ):
-        """从MySQL获取会话历史"""
-        # 调用 _fetch_recent_history 获取对话历史
-        return self._fetch_recent_history(session_id)
+    def get_session_history(self, session_id, username=None):
+        """从MySQL获取会话历史（按用户隔离）"""
+        return self._fetch_recent_history(session_id, username)
 
-    def update_session_history(self, session_id: str, question: str, answer: str) -> list:
+    def update_session_history(self, session_id: str, question: str, answer: str, username: str = "") -> list:
         """更新会话历史到MySQL，保留最近5轮对话"""
         try:
-            # 插入新的对话记录
+            # 插入新的对话记录（含用户名）
             self.mysql_client.cursor.execute("""
-                INSERT INTO conversations (session_id, question, answer, timestamp)
-                VALUES (%s, %s, %s, NOW())
-            """, (session_id, question, answer))
+                INSERT INTO conversations (session_id, username, question, answer, timestamp)
+                VALUES (%s, %s, %s, %s, NOW())
+            """, (session_id, username, question, answer))
             # 获取更新后的对话历史
-            history = self._fetch_recent_history(session_id)
-            # 删除超出 5 轮的旧记录
+            history = self._fetch_recent_history(session_id, username)
+            # 删除超出 5 轮的旧记录（仅限当前用户）
             self.mysql_client.cursor.execute("""
                 DELETE FROM conversations
-                WHERE session_id = %s AND id NOT IN (
+                WHERE session_id = %s AND username = %s AND id NOT IN (
                     SELECT id FROM (
                         SELECT id
                         FROM conversations
-                        WHERE session_id = %s
+                        WHERE session_id = %s AND username = %s
                         ORDER BY timestamp DESC
                         LIMIT %s
                     ) AS sub
                 )
-            """, (session_id, session_id, 5))
+            """, (session_id, username, session_id, username, 5))
             # 提交事务
             self.mysql_client.connection.commit()
-            # 记录更新成功的日志
-            self.logger.info(f"会话 {session_id} 历史更新成功")
-            # 返回更新后的历史
+            self.logger.info(f"会话 {session_id} (用户:{username}) 历史更新成功")
             return history
         except pymysql.MySQLError as e:
-            # 记录数据库操作失败的错误日志
             self.logger.error(f"更新会话历史失败: {e}")
-            # 回滚事务
             self.mysql_client.connection.rollback()
-            # 抛出异常
             raise
         except Exception as e:
-            # 记录意外错误的日志
             self.logger.error(f"更新会话历史意外错误: {e}")
-            # 回滚事务
             self.mysql_client.connection.rollback()
-            # 抛出异常
             raise
-    def clear_session_history(self, session_id: str) -> bool:
-        """清除指定会话历史"""
+
+    def clear_session_history(self, session_id: str, username: str = "") -> bool:
+        """清除指定会话历史（按用户隔离）"""
         try:
-            # 删除指定 session_id 的所有对话记录
-            self.mysql_client.cursor.execute("""
-                DELETE FROM conversations
-                WHERE session_id = %s
-            """, (session_id,))
-            # 提交事务
+            if username:
+                self.mysql_client.cursor.execute("""
+                    DELETE FROM conversations
+                    WHERE session_id = %s AND username = %s
+                """, (session_id, username))
+            else:
+                self.mysql_client.cursor.execute("""
+                    DELETE FROM conversations
+                    WHERE session_id = %s
+                """, (session_id,))
             self.mysql_client.connection.commit()
-            # 记录清除成功的日志
-            self.logger.info(f"会话 {session_id} 历史已清除")
-            # 返回 True 表示成功
+            self.logger.info(f"会话 {session_id} (用户:{username}) 历史已清除")
             return True
         except pymysql.MySQLError as e:
-            # 记录清除失败的错误日志
             self.logger.error(f"清除会话历史失败: {e}")
-            # 回滚事务
             self.mysql_client.connection.rollback()
-            # 返回 False 表示失败
             return False
 
-    def query(self, query, source_filter=None, session_id=None):
+    def query(self, query, source_filter=None, session_id=None, username=None):
         # print(f'你好')
-        """查询集成系统，支持对话历史和流式输出"""
+        """查询集成系统，支持对话历史和流式输出（按用户隔离）"""
         start_time = time.time()  # 记录查询开始时间
         # 记录查询信息到日志
-        self.logger.info(f"处理查询: '{query}' (会话ID: {session_id})")
-        # 获取对话历史，若无 session_id 则返回空列表
-        history = self.get_session_history(session_id) if session_id else []
+        self.logger.info(f"处理查询: '{query}' (会话ID: {session_id}, 用户: {username})")
+        print(f"[DEBUG query] session_id={session_id}, username={username}")
+        # 获取对话历史，若无 session_id 则返回空列表（按用户过滤）
+        history = self.get_session_history(session_id, username) if session_id else []
         # print(f'history--->{history}')
         # 执行 BM25 搜索，获取答案和是否需要 RAG 的标志
         answer, need_rag = self.bm25_search.search(query, threshold=0.85)
@@ -202,8 +208,8 @@ class IntegratedQASystem:
             # 如果找到可靠答案，记录答案到日志
             self.logger.info(f"MySQL答案: {answer}")
             if session_id:
-                # 更新对话历史
-                self.update_session_history(session_id, query, answer)
+                # 更新对话历史（含用户名）
+                self.update_session_history(session_id, query, answer, username)
             # 计算处理时间
             processing_time = time.time() - start_time
             # 记录处理时间到日志
@@ -221,8 +227,8 @@ class IntegratedQASystem:
                 # 逐 token 返回，标记为部分答案
                 yield token, False
             if session_id:
-                # 更新对话历史，存储完整答案
-                self.update_session_history(session_id, query, collected_answer)
+                # 更新对话历史，存储完整答案（含用户名）
+                self.update_session_history(session_id, query, collected_answer, username)
             # 计算处理时间
             processing_time = time.time() - start_time
             # 记录处理时间到日志

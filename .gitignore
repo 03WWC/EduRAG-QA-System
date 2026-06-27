@@ -32,6 +32,10 @@ rag_qa/model/
 rag_qa/core/bert_query_classifier/
 bert_results/
 
+# 用户上传的数据文件
+rag_qa/data/*/
+!rag_qa/data/ai_data/
+
 # 系统文件
 .DS_Store
 Thumbs.db

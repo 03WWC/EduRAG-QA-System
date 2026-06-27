@@ -86,6 +86,26 @@ class UserService:
             logger.error(f"获取用户列表失败: {e}")
             return []
 
+    def change_password(self, username: str, old_password: str, new_password: str) -> bool:
+        """修改密码，需验证原密码"""
+        try:
+            self.mysql.cursor.execute(
+                "SELECT id FROM users WHERE username=%s AND password_hash=%s",
+                (username, self._hash_password(old_password)),
+            )
+            if not self.mysql.cursor.fetchone():
+                return False
+            self.mysql.cursor.execute(
+                "UPDATE users SET password_hash=%s WHERE username=%s",
+                (self._hash_password(new_password), username),
+            )
+            self.mysql.connection.commit()
+            logger.info(f"用户 {username} 密码已修改")
+            return True
+        except pymysql.MySQLError as e:
+            logger.error(f"修改密码失败: {e}")
+            return False
+
     def delete_user(self, user_id: int) -> bool:
         """删除用户"""
         try:
