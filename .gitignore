@@ -29,6 +29,7 @@ env/
 
 # 模型文件（太大，不适合git管理）
 rag_qa/model/
+rag_qa/core/bert_query_classifier/
 bert_results/
 
 # 系统文件

@@ -27,7 +27,9 @@ export function useWebSocket(options = {}) {
     const apiBase = localStorage.getItem('api_base') || ''
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = apiBase ? apiBase.replace(/^https?:\/\//, '') : location.host
-    return `${protocol}//${host}/api/stream`
+    const token = localStorage.getItem('eduraag_token') || ''
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : ''
+    return `${protocol}//${host}/api/stream${tokenParam}`
   }
 
   function connect() {
