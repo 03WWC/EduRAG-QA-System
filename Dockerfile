@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # pip 全部走清华源（清华同步了 PyTorch 的包）
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip install --no-cache-dir torch==2.5.1
+RUN pip install --no-cache-dir torch>=2.6
 
 COPY requirements-server.txt .
 RUN pip install --no-cache-dir -r requirements-server.txt
