@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
   app:
     build: .
     container_name: eduraag-app
     restart: always
-    network_mode: host   # 直接共用宿主机网络，访问 localhost 上的 MySQL/Redis/Milvus
+    network_mode: host
     volumes:
       - ./rag_qa/model:/app/rag_qa/model
       - ./rag_qa/core/bert_query_classifier:/app/rag_qa/core/bert_query_classifier
