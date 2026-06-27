@@ -82,6 +82,22 @@ const sidebarOpen = ref(window.innerWidth > 768)
 const isMobile = ref(window.innerWidth <= 768)
 const appReady = ref(false)
 
+// ===== 浏览器后退支持 =====
+function closeAllPanels() {
+  if (showAdmin.value) { showAdmin.value = false; return true }
+  if (showProfile.value) { showProfile.value = false; return true }
+  if (showSettings.value) { showSettings.value = false; return true }
+  return false
+}
+
+function pushPanelState() {
+  history.pushState({ panel: true }, '', location.href)
+}
+
+window.addEventListener('popstate', () => {
+  closeAllPanels()
+})
+
 async function initApp() {
   const theme = localStorage.getItem('eduraag_theme')
   if (theme === 'dark') {
@@ -171,6 +187,10 @@ function handleSend(query, sourceFilter) {
 function handleRenameSession(sessionId, newTitle) {
   renameSession(sessionId, newTitle)
 }
+
+function openAdmin() { showAdmin.value = true; pushPanelState() }
+function openProfile() { showProfile.value = true; pushPanelState() }
+function openSettings() { showSettings.value = true; pushPanelState() }
 </script>
 
 <template>
@@ -188,7 +208,7 @@ function handleRenameSession(sessionId, newTitle) {
           @switch-session="handleSwitchSession"
           @rename-session="handleRenameSession"
           @delete-session="handleDeleteSession"
-          @toggle-settings="showSettings = true"
+          @toggle-settings="openSettings"
         />
       </div>
       <button v-if="!sidebarOpen" class="sidebar-toggle" @click="sidebarOpen = true">
@@ -198,7 +218,7 @@ function handleRenameSession(sessionId, newTitle) {
       </button>
       <div class="chat-wrapper">
         <div class="user-bar">
-          <button class="user-info-btn" @click="showProfile = true">
+          <button class="user-info-btn" @click="openProfile">
             <span class="user-avatar-sm">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="12" :fill="isAdmin ? '#6366f1' : '#10b981'" />
@@ -210,7 +230,7 @@ function handleRenameSession(sessionId, newTitle) {
             <span class="role-dot" :class="{ admin: isAdmin }">{{ isAdmin ? '管理' : '用户' }}</span>
           </button>
           <div class="bar-actions">
-            <button v-if="isAdmin" class="bar-btn admin-btn" @click="showAdmin = true">⚙️ 管理</button>
+            <button v-if="isAdmin" class="bar-btn admin-btn" @click="openAdmin">⚙️ 管理</button>
             <button class="bar-btn logout-btn" @click="handleLogout">退出</button>
           </div>
         </div>
