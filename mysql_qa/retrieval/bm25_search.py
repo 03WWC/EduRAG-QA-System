@@ -82,8 +82,13 @@ class BM25Search:
         try:
             # 分词查询
             query_tokens = preprocess_text(query)
-            # 计算 BM25 分数
+            # 计算 BM25 分数（原始分数，体现真实词项匹配度）
             scores = self.bm25.get_scores(query_tokens)
+            raw_best_score = scores.max()
+            # 如果原始 BM25 最高分太低（几乎没有词项重叠），直接认为不匹配
+            if raw_best_score < 0.5:
+                self.logger.info(f"BM25 原始分数过低 ({raw_best_score:.3f})，无有效匹配")
+                return None, True
             # 计算 Softmax 分数
             softmax_scores = self._softmax(scores)
             # 获取最高分索引

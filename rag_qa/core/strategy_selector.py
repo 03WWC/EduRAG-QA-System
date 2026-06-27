@@ -3,7 +3,10 @@
 import os
 import sys
 
-from langchain.prompts import PromptTemplate
+try:
+    from langchain_core.prompts import PromptTemplate
+except ImportError:
+    from langchain.prompts import PromptTemplate
 current_path = os.path.dirname(os.path.abspath(__file__))
 rag_qa_path = os.path.dirname(current_path)
 base_path = os.path.dirname(rag_qa_path)
@@ -88,7 +91,8 @@ class StrategySelector:
     #   定义方法，选择检索策略
     def select_strategy(self, query):
         #   调用 LLM 获取检索策略
-        strategy = self.call_dashscope(self.strategy_prompt_template.format(query=query)).strip()
+        strategy_raw = self.call_dashscope(self.strategy_prompt_template.format(query=query))
+        strategy = (strategy_raw or "直接检索").strip()
         logger.info(f"为查询 '{query}' 选择的检索策略：{strategy}")
         return strategy
 

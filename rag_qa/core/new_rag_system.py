@@ -9,6 +9,7 @@ from openai import OpenAI
 # 获取当前文件所在目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # print(f'current_dir--》{current_dir}')
+sys.path.insert(0, current_dir)
 # 获取core文件所在的目录的绝对路径
 rag_qa_path = os.path.dirname(current_dir)
 # print(f'rag_qa_path--》{rag_qa_path}')

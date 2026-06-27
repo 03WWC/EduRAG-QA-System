@@ -8,7 +8,7 @@ from docx.oxml.text.paragraph import CT_P  # 用于处理段落XML结构
 from docx.text.paragraph import Paragraph  # 用于处理段落内容
 from docx import Document as Docu1
 from docx.document import Document as Docu2
-from docx import ImagePart  # 用于处理Word文档和图片
+from docx.opc.constants import RELATIONSHIP_TYPE as REL  # 用于判断Word文档中的图片类型
 from PIL import Image  # 用于处理图片
 from io import BytesIO  # 用于将字节流转换为图片
 import numpy as np  # 用于处理数组
@@ -90,7 +90,7 @@ class OCRDOCLoader(BaseLoader):
                     # 遍历图片，获取图片ID
                     for img_id in image.xpath('.//a:blip/@r:embed'):
                         part = doc.part.related_parts[img_id]  # 根据图片ID获取图片对象
-                        if isinstance(part, ImagePart):  # 如果该部分是图片
+                        if hasattr(part, 'reltype') and part.reltype == REL.IMAGE:  # 如果该部分是图片
                             # BytesIO 是 Python 内置的 io 模块中的一个类，用于在内存中读写二进制数据
                             # part._blob 通常表示从某个文档（如 DOCX 文件）中提取的二进制内容。
                             image = Image.open(BytesIO(part._blob))  # 打开图片

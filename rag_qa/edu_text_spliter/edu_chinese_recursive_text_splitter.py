@@ -1,6 +1,9 @@
 import re
 from typing import List, Optional, Any
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
 import logging
 
 logger = logging.getLogger(__name__)

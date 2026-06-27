@@ -2,7 +2,10 @@ import os
 import sys
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders.markdown import UnstructuredMarkdownLoader
-from langchain.text_splitter import MarkdownTextSplitter
+try:
+    from langchain_text_splitters import MarkdownTextSplitter
+except ImportError:
+    from langchain.text_splitter import MarkdownTextSplitter
 from datetime import datetime
 current_path = os.path.dirname(os.path.abspath(__file__))
 rag_qa_path = os.path.dirname(current_path)

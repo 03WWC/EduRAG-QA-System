@@ -1,4 +1,4 @@
-# -*- coidng:utf-8 -*-
+# -*- coding:utf-8 -*-
 # 导入 MySQL 和 Redis 客户端，管理数据库和缓存
 from mysql_qa import MySQLClient, RedisClient, BM25Search
 # 导入 RAG 系统组件，用于知识库检索和答案生成
@@ -89,8 +89,8 @@ class IntegratedQASystem:
         except Exception as e:
             # 记录 API 调用失败的错误日志
             self.logger.error(f"LLM调用失败: {e}")
-            # 返回错误信息
-            return f"错误：LLM调用失败 - {e}"
+            # 以生成器方式返回错误信息
+            yield f"错误：LLM调用失败 - {e}"
 
     def _fetch_recent_history(self, session_id):
         """获取最近5轮对话历史"""

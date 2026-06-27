@@ -27,8 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 创建静态文件目录
-os.makedirs("static", exist_ok=True)
+# 确定前端文件目录（开发时不存在则 fallback 到 static）
+FRONTEND_DIR = "frontend/dist" if os.path.exists("frontend/dist") else "static"
+os.makedirs(FRONTEND_DIR, exist_ok=True)
 
 # 创建全局QA系统实例
 qa_system = IntegratedQASystem()
@@ -36,20 +37,28 @@ qa_system = IntegratedQASystem()
 # 定义日常问候用语模式和回复
 GREETING_PATTERNS = [
     {
-        "pattern": r"^(你好|您好|hi|hello)",
-        "response": "你好！我是黑马程序员，专注于为学生答疑解惑，很高兴为你服务！"
+        "pattern": r"^(你好|您好|hi|hello|嗨|哈喽|早上好|下午好|晚上好)",
+        "response": "你好！我是智能学习助手，有什么问题可以帮你解答吗？"
     },
     {
         "pattern": r"^(你是谁|您是谁|你叫什么|你的名字|who are you)",
-        "response": "我是黑马程序员，你的智能学习助手，致力于提供 IT 教育相关的解答！"
+        "response": "我是你的智能学习助手，专注于知识问答和学习辅助，随时为你服务！"
     },
     {
         "pattern": r"^(在吗|在不在|有人吗)",
-        "response": "我在！我是黑马程序员，随时为你解答问题！"
+        "response": "我在呢，请随时向我提问！"
     },
     {
-        "pattern": r"^(干嘛呢|你在干嘛|做什么)",
-        "response": "我正在待命，随时为你解答 IT 学习相关的问题！有什么我可以帮你的？"
+        "pattern": r"^(干嘛呢|你在干嘛|做什么|在做什么)",
+        "response": "我正在等待你的提问，有什么需要了解的尽管问我！"
+    },
+    {
+        "pattern": r"^(谢谢|多谢|感谢|thanks|thank you|3q|3Q)",
+        "response": "不客气，有问题随时找我！"
+    },
+    {
+        "pattern": r"^(再见|拜拜|bye|88|晚安|回头见)",
+        "response": "再见，祝你学习顺利！"
     }
 ]
 
@@ -66,13 +75,27 @@ class QueryResponse(BaseModel):
     session_id: str
     processing_time: float
 
-# 添加静态文件服务
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# 添加静态文件服务 — 兼容 Vite 构建产物的路径结构
+assets_path = os.path.join(FRONTEND_DIR, "assets")
+if os.path.exists(assets_path):
+    app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-# 根路径重定向到index.html
+# 根路径返回前端页面
 @app.get("/")
 async def read_root():
-    return FileResponse("static/index.html")
+    index_path = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "EduRAG API is running. Frontend not built yet.", "docs": "/docs"}
+
+# favicon
+@app.get("/favicon.svg")
+async def favicon():
+    favicon_path = os.path.join(FRONTEND_DIR, "favicon.svg")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    return {"status": "not found"}
 
 # 创建新会话
 @app.post("/api/create_session")
@@ -101,6 +124,8 @@ async def clear_history(session_id: str):
 
 # 检查是否为日常问候用语并返回模板回复
 def check_greeting(query: str) -> Optional[str]:
+    if not query:
+        return None
     query_text = query.strip()  # 去除 # 前缀
     for pattern_info in GREETING_PATTERNS:
         if re.match(pattern_info["pattern"], query_text, re.IGNORECASE):
@@ -127,10 +152,20 @@ async def query(request: QueryRequest):
     # 执行 BM25 搜索
     answer, need_rag = qa_system.bm25_search.search(request.query, threshold=0.85)
     if need_rag:
-        # 需要 RAG，提示使用 WebSocket
+        # BM25 未命中，回退到 RAG（收集完整答案后返回）
+        collected_answer = ""
+        for token, is_complete in qa_system.query(
+            query=request.query,
+            source_filter=request.source_filter,
+            session_id=session_id
+        ):
+            if token:
+                collected_answer += token
+            if is_complete:
+                break
         return {
-            "answer": "请使用WebSocket接口获取流式响应",
-            "is_streaming": True,
+            "answer": collected_answer or "未找到答案",
+            "is_streaming": False,
             "session_id": session_id,
             "processing_time": time.time() - start_time
         }
@@ -151,8 +186,16 @@ async def websocket_endpoint(websocket: WebSocket):
             # 接收客户端消息
             data = await websocket.receive_text()
             request_data = json.loads(data)  # 解析 JSON 数据
+
+            # 心跳消息直接跳过
+            if request_data.get("type") == "ping":
+                continue
+
             # 获取查询参数
             query = request_data.get("query")
+            if not query:
+                continue  # 空查询跳过
+
             source_filter = request_data.get("source_filter")
             session_id = request_data.get("session_id", str(uuid.uuid4()))
             start_time = time.time()  # 记录开始时间
@@ -179,7 +222,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "is_complete": True,
                         "processing_time": time.time() - start_time
                     })
-                break
+                continue
             # 调用问答系统，流式处理查询
             collected_answer = ""
             for token, is_complete in qa_system.query(query, source_filter=source_filter, session_id=session_id):
@@ -246,4 +289,4 @@ async def get_sources():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

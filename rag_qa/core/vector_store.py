@@ -10,8 +10,11 @@ sys.path.insert(0, rag_qa_path)
 sys.path.insert(0, base_path)
 # 导入 Milvus 相关类，用于操作向量数据库
 from pymilvus import MilvusClient, DataType, AnnSearchRequest, WeightedRanker
-# 导入 Document 类，用于创建文档对象
-from langchain.docstore.document import Document
+# 导入 Document 类，用于创建文档对象（兼容新版 langchain）
+try:
+    from langchain_core.documents import Document
+except ImportError:
+    from langchain.docstore.document import Document
 # 导入 CrossEncoder，用于重排序和 NLI 判断
 from sentence_transformers import CrossEncoder
 # 导入 hashlib 模块，用于生成唯一 ID 的哈希值
@@ -123,13 +126,16 @@ class VectorStore:
         # 初始化一个稀疏向量的字典（Milvus要求存储稀疏向量的格式）
             sparse_vector = {}
         # 获取第i行对应的稀疏向量数据[0.4, 0.2, 0, 0, 0.1]
-            row = embeddings["sparse"].getrow(i)
+            row = embeddings["sparse"][i]  # 兼容 csr_matrix 和 csr_array
         # row = embeddings["sparse"][i]:新版本milvus-model，支持这种获取稀疏向量的形式
         # indics = row.row
         # print(f'row--》{row}')
         # print(f'row--》{row.shape}')
-        # 获取稀疏向量的非零值的索引
-            indics = row.indices
+        # 获取稀疏向量的非零值索引（兼容 csr 的 .indices 和 coo 的 .col）
+            if hasattr(row, 'indices'):
+                indics = row.indices
+            else:
+                indics = row.col
         # print(f'indics--》{indics}')
         # 获取稀疏向量的非零值
             values = row.data
@@ -172,9 +178,12 @@ class VectorStore:
         # 初始化查询的稀疏向量字典
         sparse_query_vector = {}
         # 获取查询稀疏向量的第 0 行数据
-        row = query_embeddings["sparse"].getrow(0)
-        # 获取稀疏向量的非零值索引
-        indices = row.indices
+        row = query_embeddings["sparse"][0]  # 兼容 csr_matrix 和 csr_array
+        # 获取稀疏向量的非零值索引（兼容 csr 的 .indices 和 coo 的 .col）
+        if hasattr(row, 'indices'):
+            indices = row.indices
+        else:
+            indices = row.col
         # 获取稀疏向量的非零值
         values = row.data
         # 将索引和值配对，填充稀疏向量字典
