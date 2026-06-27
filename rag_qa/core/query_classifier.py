@@ -25,8 +25,11 @@ class QueryClassifier:
     def __init__(self, model_path="bert_query_classifier"):
         # 初始化模型路径
         self.model_path = model_path
-        # 加载 BERT 分词器
-        self.tokenizer = BertTokenizer.from_pretrained(r"C:\Users\Administrator\Desktop\EduRAG\rag_qa\model\bert-base-chinese")
+        # 加载 BERT 分词器（优先本地路径，失败则在线下载）
+        try:
+            self.tokenizer = BertTokenizer.from_pretrained(model_path)
+        except Exception:
+            self.tokenizer = BertTokenizer.from_pretrained("bert-base-chinese")
         # 初始化模型
         self.model = None
         # 确定设备（GPU 或 CPU）
