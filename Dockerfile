@@ -21,4 +21,6 @@ COPY . .
 
 EXPOSE 8000
 
+ENV OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
+
 CMD ["python", "app.py"]
