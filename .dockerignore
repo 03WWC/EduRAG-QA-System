@@ -1,0 +1,24 @@
+# 模型文件（挂载 volume，不进镜像）
+rag_qa/model/
+rag_qa/core/bert_query_classifier/
+rag_qa/data/
+
+# 日志
+logs/
+*.log
+
+# Git
+.git/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 前端（已构建产物 volume）
+frontend/dist/
+frontend/node_modules/
+
+# 配置（volume 挂载）
+config.ini
